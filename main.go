@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 var urlStore = make(map[string]string)
@@ -29,16 +30,10 @@ func generateShortKey() string {
 	return sb.String()
 }
 
-func handleShorten(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
-	}
-
-	defer r.Body.Close()
-	longURLBytes, err := io.ReadAll(r.Body)
+func handleShorten(c *gin.Context) {
+	longURLBytes, err := c.GetRawData()
 	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+		c.String(http.StatusInternalServerError, "Failed to read request body")
 		return
 	}
 
@@ -46,37 +41,29 @@ func handleShorten(w http.ResponseWriter, r *http.Request) {
 	urlStore[shortKey] = string(longURLBytes)
 
 	shortURL := fmt.Sprintf("%s%s/%s", addr, port, shortKey)
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(shortURL))
+	c.String(http.StatusCreated, shortURL)
 } 
 
-func handleRedirect(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
-	}
-
-	shortKey := r.URL.Path[1:]
-	if shortKey == "" || shortKey == "shorten" {
-		http.NotFound(w, r)
-		return
-	}
+func handleRedirect(c *gin.Context) {
+	shortKey := c.Param("shortKey")
 
 	longURL, ok := urlStore[shortKey]
 	if !ok {
-		http.NotFound(w, r)
+		c.String(http.StatusNotFound, "URL not found")
 		return
 	}
 
-	http.Redirect(w, r, longURL, http.StatusFound)
+	c.Redirect(http.StatusFound, longURL)
 }
 
 func main() {
-	http.HandleFunc("/shorten", handleShorten)
-	http.HandleFunc("/", handleRedirect)
+	router := gin.Default()
 
-	fmt.Printf("Starting server on %s%s", addr, port)
-	if err := http.ListenAndServe(port, nil); err != nil {
-		log.Fatal("ListenAndServe: ", err)
+	router.POST("/shorten", handleShorten)
+	router.GET("/:shortKey", handleRedirect)
+
+	fmt.Printf("Starting server on %s%s\n", addr, port)
+	if err := router.Run(port); err != nil {
+		log.Fatal("Failed to run server: ", err)
 	}
 }
