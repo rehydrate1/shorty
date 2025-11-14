@@ -19,6 +19,14 @@ const (
 	port = ":8080"
 )
 
+type ShortenRequest struct {
+	URL string `json:"url"`
+}
+
+type ShortenResponse struct {
+	ShortURL string `json:"short_url"`
+}
+
 func generateShortKey() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -31,18 +39,17 @@ func generateShortKey() string {
 }
 
 func handleShorten(c *gin.Context) {
-	longURLBytes, err := c.GetRawData()
-	if err != nil {
-		c.String(http.StatusInternalServerError, "Failed to read request body")
-		return
-	}
+	var request ShortenRequest
+	c.BindJSON(&request)
 
 	shortKey := generateShortKey()
-	urlStore[shortKey] = string(longURLBytes)
+	urlStore[shortKey] = request.URL
 
 	shortURL := fmt.Sprintf("%s%s/%s", addr, port, shortKey)
-	c.String(http.StatusCreated, shortURL)
-} 
+
+	response := ShortenResponse{ShortURL: shortURL}
+	c.JSON(http.StatusCreated, response)
+}
 
 func handleRedirect(c *gin.Context) {
 	shortKey := c.Param("shortKey")
