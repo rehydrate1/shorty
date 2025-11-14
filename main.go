@@ -12,7 +12,11 @@ import (
 
 var urlStore = make(map[string]string)
 
-const shortKeyLength = 6
+const (
+	shortKeyLength = 6
+	addr = "http://localhost"
+	port = ":8080"
+)
 
 func generateShortKey() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -37,15 +41,14 @@ func handleShorten(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
 		return
 	}
-	longURL := string(longURLBytes)
 
 	shortKey := generateShortKey()
-	urlStore[shortKey] = longURL
+	urlStore[shortKey] = string(longURLBytes)
 
-	shortURL := fmt.Sprintf("http://localhost:8080/%s", shortKey)
+	shortURL := fmt.Sprintf("%s%s/%s", addr, port, shortKey)
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(shortURL))
-}
+} 
 
 func handleRedirect(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -72,8 +75,8 @@ func main() {
 	http.HandleFunc("/shorten", handleShorten)
 	http.HandleFunc("/", handleRedirect)
 
-	fmt.Println("Starting server on http://localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	fmt.Printf("Starting server on %s%s", addr, port)
+	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
