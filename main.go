@@ -12,12 +12,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 const (
 	shortKeyLength = 6
-	charset        = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 	addr = "http://localhost"
 	port = ":8080"
@@ -40,15 +39,15 @@ func main() {
 	if dsn == "" {
 		log.Fatal("DATABASE_DSN env is not set")
 	}
-	
+
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		log.Fatal("Failed to open DB connection: ", err)
+		log.Fatalf("ERROR: failed to open DB connection: %v", err)
 	}
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
-		log.Fatalf("Failed to ping DB: %v", err)
+		log.Fatalf("ERROR: Failed to ping DB: %v", err)
 	}
 
 	server := &Server{
@@ -61,7 +60,7 @@ func main() {
 
 	log.Printf("Starting server at %s%s", addr, port)
 	if err := router.Run(port); err != nil {
-		log.Fatal("Failed to start server: ", err)
+		log.Fatalf("ERROR: Failed to start server: %v", err)
 	}
 }
 
@@ -73,7 +72,7 @@ func (s *Server) handleShorten(c *gin.Context) {
 	}
 
 	shortKey := generateShortKey()
-	
+
 	query := `INSERT INTO links (short_key, original_url) VALUES ($1, $2)`
 	if _, err := s.db.ExecContext(ctx, query, shortKey, req.URL); err != nil {
 		log.Printf("ERROR: failed to insert short link to DB: %v", err)
@@ -105,8 +104,11 @@ func (s *Server) handleRedirect(c *gin.Context) {
 			return
 		}
 
-		log.Printf("ERROR: Failed to get rows from DB: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get rows from DB"})
+		log.Printf("ERROR: failed to get original URL from DB: %v", err)
+		c.JSON(
+			http.StatusInternalServerError,
+			gin.H{"error": "failed to get original URL from DB"},
+		)
 		return
 	}
 
