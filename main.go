@@ -1,14 +1,18 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 const (
@@ -28,32 +32,57 @@ type ShortenResponse struct {
 }
 
 type Server struct {
-	store map[string]string
+	db *sql.DB
 }
 
 func main() {
+	dsn := os.Getenv("DATABASE_DSN")
+	if dsn == "" {
+		log.Fatal("DATABASE_DSN env is not set")
+	}
+	
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		log.Fatal("Failed to open DB connection: ", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to ping DB: %v", err)
+	}
+
 	server := &Server{
-		store: make(map[string]string),
+		db: db,
 	}
 	router := gin.Default()
 
 	router.POST("/shorten", server.handleShorten)
 	router.GET("/:shortKey", server.handleRedirect)
 
-	log.Printf("Server started at %s%s", addr, port)
+	log.Printf("Starting server at %s%s", addr, port)
 	if err := router.Run(port); err != nil {
 		log.Fatal("Failed to start server: ", err)
 	}
 }
 
 func (s *Server) handleShorten(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req ShortenRequest
 	if err := c.BindJSON(&req); err != nil {
 		return
 	}
 
 	shortKey := generateShortKey()
-	s.store[shortKey] = req.URL
+	
+	query := `INSERT INTO links (short_key, original_url) VALUES ($1, $2)`
+	if _, err := s.db.ExecContext(ctx, query, shortKey, req.URL); err != nil {
+		log.Printf("ERROR: failed to insert short link to DB: %v", err)
+		c.JSON(
+			http.StatusInternalServerError,
+			gin.H{"error": "failed to insert short link to DB"},
+		)
+		return
+	}
 
 	baseURL := fmt.Sprintf("%s%s", addr, port)
 	shortURL := fmt.Sprintf("%s/%s", baseURL, shortKey)
@@ -63,11 +92,21 @@ func (s *Server) handleShorten(c *gin.Context) {
 }
 
 func (s *Server) handleRedirect(c *gin.Context) {
+	ctx := c.Request.Context()
 	shortKey := c.Param("shortKey")
 
-	longURL, ok := s.store[shortKey]
-	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
+	query := `SELECT original_url FROM links WHERE short_key=$1`
+
+	var longURL string
+	if err := s.db.QueryRowContext(ctx, query, shortKey).Scan(&longURL); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("ERROR: URL not found: %v", err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
+			return
+		}
+
+		log.Printf("ERROR: Failed to get rows from DB: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get rows from DB"})
 		return
 	}
 
