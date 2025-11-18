@@ -11,10 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var urlStore = make(map[string]string)
-
 const (
 	shortKeyLength = 6
+	charset        = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
 	addr = "http://localhost"
 	port = ":8080"
 )
@@ -27,50 +27,62 @@ type ShortenResponse struct {
 	ShortURL string `json:"short_url"`
 }
 
-func generateShortKey() string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	var sb strings.Builder
-	for range shortKeyLength {
-		sb.WriteByte(charset[seededRand.Intn(len(charset))])
-	}
-	return sb.String()
+type Server struct {
+	store map[string]string
 }
 
-func handleShorten(c *gin.Context) {
-	var request ShortenRequest
-	c.BindJSON(&request)
+func main() {
+	server := &Server{
+		store: make(map[string]string),
+	}
+	router := gin.Default()
+
+	router.POST("/shorten", server.handleShorten)
+	router.GET("/:shortKey", server.handleRedirect)
+
+	log.Printf("Server started at %s%s", addr, port)
+	if err := router.Run(port); err != nil {
+		log.Fatal("Failed to start server: ", err)
+	}
+}
+
+func (s *Server) handleShorten(c *gin.Context) {
+	var req ShortenRequest
+	if err := c.BindJSON(&req); err != nil {
+		return
+	}
 
 	shortKey := generateShortKey()
-	urlStore[shortKey] = request.URL
+	s.store[shortKey] = req.URL
 
-	shortURL := fmt.Sprintf("%s%s/%s", addr, port, shortKey)
+	baseURL := fmt.Sprintf("%s%s", addr, port)
+	shortURL := fmt.Sprintf("%s/%s", baseURL, shortKey)
 
-	response := ShortenResponse{ShortURL: shortURL}
-	c.JSON(http.StatusCreated, response)
+	resp := ShortenResponse{ShortURL: shortURL}
+	c.JSON(http.StatusCreated, resp)
 }
 
-func handleRedirect(c *gin.Context) {
+func (s *Server) handleRedirect(c *gin.Context) {
 	shortKey := c.Param("shortKey")
 
-	longURL, ok := urlStore[shortKey]
+	longURL, ok := s.store[shortKey]
 	if !ok {
-		c.String(http.StatusNotFound, "URL not found")
+		c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
 		return
 	}
 
 	c.Redirect(http.StatusFound, longURL)
 }
 
-func main() {
-	router := gin.Default()
+func generateShortKey() string {
+	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	router.POST("/shorten", handleShorten)
-	router.GET("/:shortKey", handleRedirect)
+	var sb strings.Builder
+	sb.Grow(shortKeyLength)
 
-	fmt.Printf("Starting server on %s%s\n", addr, port)
-	if err := router.Run(port); err != nil {
-		log.Fatal("Failed to run server: ", err)
+	for range shortKeyLength {
+		sb.WriteByte(charset[seededRand.Intn(len(charset))])
 	}
+
+	return sb.String()
 }
