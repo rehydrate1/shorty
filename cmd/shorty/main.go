@@ -5,10 +5,9 @@ import (
 	"os"
 
 	"github.com/rehydrate1/shorty/internal/config"
-	"github.com/rehydrate1/shorty/internal/storage/postgres"
-	"github.com/rehydrate1/shorty/internal/http-server/handlers/url/save"
 	"github.com/rehydrate1/shorty/internal/http-server/handlers/url/redirect"
-
+	"github.com/rehydrate1/shorty/internal/http-server/handlers/url/save"
+	"github.com/rehydrate1/shorty/internal/storage/postgres"
 
 	"github.com/gin-gonic/gin"
 )

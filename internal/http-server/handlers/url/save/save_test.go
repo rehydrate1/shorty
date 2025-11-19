@@ -27,11 +27,11 @@ func (m *MockURLSaver) SaveURL(ctx context.Context, alias, urlToSave string) err
 
 func TestSaveHandler(t *testing.T) {
 	cases := []struct {
-		name string
-		inputURL string
+		name      string
+		inputURL  string
 		mockError error
-		wantCode int
-		wantBody string
+		wantCode  int
+		wantBody  string
 	}{
 		{
 			name:      "Success",
@@ -63,7 +63,7 @@ func TestSaveHandler(t *testing.T) {
 			}
 
 			gin.SetMode(gin.TestMode)
-			
+
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 			handler := New(logger, urlSaverMock, "http://localhost:8080")
 

@@ -69,7 +69,7 @@ func TestRedirectHandler(t *testing.T) {
 
 			gin.SetMode(gin.TestMode)
 			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-			
+
 			handler := New(logger, urlGetterMock)
 
 			r := gin.New()
