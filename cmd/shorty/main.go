@@ -1,14 +1,11 @@
 package main
 
 import (
-	"errors"
 	"log/slog"
-	"net/http"
 	"os"
 
 	"github.com/rehydrate1/shorty/internal/config"
 	"github.com/rehydrate1/shorty/internal/storage/postgres"
-	"github.com/rehydrate1/shorty/internal/storage"
 	"github.com/rehydrate1/shorty/internal/http-server/handlers/url/save"
 	"github.com/rehydrate1/shorty/internal/http-server/handlers/url/redirect"
 
