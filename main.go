@@ -4,9 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -37,37 +38,45 @@ type ShortenResponse struct {
 type Server struct {
 	db  *sql.DB
 	cfg *Config
+	log *slog.Logger
 }
 
 func main() {
+	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
 	cfg, err := LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
 	}
 
 	dsn := cfg.DB_DSN
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		log.Fatalf("ERROR: failed to open DB connection: %v", err)
+		log.Error("Failed to open DB connection", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
-		log.Fatalf("ERROR: Failed to ping DB: %v", err)
+		log.Error("Failed to ping DB", "error", err)
+		os.Exit(1)
 	}
 
 	server := &Server{
-		db: db,
+		db:  db,
 		cfg: cfg,
+		log: log,
 	}
 	router := gin.Default()
 
 	router.POST("/shorten", server.handleShorten)
 	router.GET("/:shortKey", server.handleRedirect)
 
-	log.Printf("Starting server at %s", cfg.BaseURL)
+	log.Info("Starting server", "url", cfg.BaseURL)
 	if err := router.Run(cfg.HTTPServer); err != nil {
-		log.Fatalf("ERROR: Failed to start server: %v", err)
+		log.Error("Failed to start server", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -82,13 +91,14 @@ func (s *Server) handleShorten(c *gin.Context) {
 
 	query := `INSERT INTO links (short_key, original_url) VALUES ($1, $2)`
 	if _, err := s.db.ExecContext(ctx, query, shortKey, req.URL); err != nil {
-		log.Printf("ERROR: failed to insert short link to DB: %v", err)
+		s.log.Error("failed to insert short link to DB", "error", err)
 		c.JSON(
 			http.StatusInternalServerError,
 			gin.H{"error": "failed to insert short link to DB"},
 		)
 		return
 	}
+	s.log.Info("Short link created", "short_key", shortKey, "original_url", req.URL)
 
 	shortURL := fmt.Sprintf("%s/%s", s.cfg.BaseURL, shortKey)
 
@@ -105,12 +115,12 @@ func (s *Server) handleRedirect(c *gin.Context) {
 	var longURL string
 	if err := s.db.QueryRowContext(ctx, query, shortKey).Scan(&longURL); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			log.Printf("ERROR: URL not found: %v", err)
+			s.log.Info("Link not found", "short_key", shortKey)
 			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
 			return
 		}
 
-		log.Printf("ERROR: failed to get original URL from DB: %v", err)
+		s.log.Error("failed to get original URL from DB", "error", err)
 		c.JSON(
 			http.StatusInternalServerError,
 			gin.H{"error": "failed to get original URL from DB"},
