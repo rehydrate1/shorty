@@ -2,27 +2,18 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/rehydrate1/shorty/internal/config"
-	"github.com/rehydrate1/shorty/internal/lib/random"
 	"github.com/rehydrate1/shorty/internal/storage/postgres"
 	"github.com/rehydrate1/shorty/internal/storage"
+	"github.com/rehydrate1/shorty/internal/http-server/handlers/url/save"
 
 
 	"github.com/gin-gonic/gin"
 )
-
-type ShortenRequest struct {
-	URL string `json:"url"`
-}
-
-type ShortenResponse struct {
-	ShortURL string `json:"short_url"`
-}
 
 type Server struct {
 	storage storage.URLSaver
@@ -53,7 +44,9 @@ func main() {
 	}
 	router := gin.Default()
 
-	router.POST("/shorten", server.handleShorten)
+	saveHandler := save.New(log, db, cfg.BaseURL)
+
+	router.POST("/shorten", saveHandler)
 	router.GET("/:shortKey", server.handleRedirect)
 
 	log.Info("Starting server", "url", cfg.BaseURL)
@@ -61,31 +54,6 @@ func main() {
 		log.Error("Failed to start server", "error", err)
 		os.Exit(1)
 	}
-}
-
-func (s *Server) handleShorten(c *gin.Context) {
-	ctx := c.Request.Context()
-	var req ShortenRequest
-	if err := c.BindJSON(&req); err != nil {
-		return
-	}
-
-	shortKey := random.NewRandomString()
-
-	if err := s.storage.SaveURL(ctx, shortKey, req.URL); err != nil {
-		s.log.Error("failed to insert short link to DB", "error", err)
-		c.JSON(
-			http.StatusInternalServerError,
-			gin.H{"error": "failed to insert short link to DB"},
-		)
-		return
-	}
-	s.log.Info("Short link created", "short_key", shortKey, "original_url", req.URL)
-
-	shortURL := fmt.Sprintf("%s/%s", s.cfg.BaseURL, shortKey)
-
-	resp := ShortenResponse{ShortURL: shortURL}
-	c.JSON(http.StatusCreated, resp)
 }
 
 func (s *Server) handleRedirect(c *gin.Context) {
