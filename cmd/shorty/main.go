@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,10 +9,11 @@ import (
 
 	"github.com/rehydrate1/shorty/internal/config"
 	"github.com/rehydrate1/shorty/internal/lib/random"
+	"github.com/rehydrate1/shorty/internal/storage/postgres"
+	"github.com/rehydrate1/shorty/internal/storage"
 
 
 	"github.com/gin-gonic/gin"
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type ShortenRequest struct {
@@ -25,7 +25,7 @@ type ShortenResponse struct {
 }
 
 type Server struct {
-	db  *sql.DB
+	storage storage.URLSaver
 	cfg *config.Config
 	log *slog.Logger
 }
@@ -39,21 +39,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	dsn := cfg.DB_DSN
-	db, err := sql.Open("pgx", dsn)
+	db, err := postgres.New(cfg.DB_DSN)
 	if err != nil {
 		log.Error("Failed to open DB connection", "error", err)
 		os.Exit(1)
 	}
 	defer db.Close()
 
-	if err := db.Ping(); err != nil {
-		log.Error("Failed to ping DB", "error", err)
-		os.Exit(1)
-	}
-
 	server := &Server{
-		db:  db,
+		storage:  db,
 		cfg: cfg,
 		log: log,
 	}
@@ -78,8 +72,7 @@ func (s *Server) handleShorten(c *gin.Context) {
 
 	shortKey := random.NewRandomString()
 
-	query := `INSERT INTO links (short_key, original_url) VALUES ($1, $2)`
-	if _, err := s.db.ExecContext(ctx, query, shortKey, req.URL); err != nil {
+	if err := s.storage.SaveURL(ctx, shortKey, req.URL); err != nil {
 		s.log.Error("failed to insert short link to DB", "error", err)
 		c.JSON(
 			http.StatusInternalServerError,
@@ -99,11 +92,9 @@ func (s *Server) handleRedirect(c *gin.Context) {
 	ctx := c.Request.Context()
 	shortKey := c.Param("shortKey")
 
-	query := `SELECT original_url FROM links WHERE short_key=$1`
-
-	var longURL string
-	if err := s.db.QueryRowContext(ctx, query, shortKey).Scan(&longURL); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+	longURL, err := s.storage.GetURL(ctx, shortKey)
+	if err != nil {
+		if errors.Is(err, storage.ErrURLNotFound) {
 			s.log.Info("Link not found", "short_key", shortKey)
 			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
 			return
