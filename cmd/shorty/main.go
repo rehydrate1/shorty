@@ -5,27 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"net/http"
 	"os"
-	"strings"
-	"time"
+
+	"github.com/rehydrate1/shorty/internal/config"
+	"github.com/rehydrate1/shorty/internal/lib/random"
+
 
 	"github.com/gin-gonic/gin"
-	"github.com/ilyakaznacheev/cleanenv"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
-
-const (
-	shortKeyLength = 6
-	charset        = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-)
-
-type Config struct {
-	HTTPServer string `env:"HTTP_SERVER_ADDRESS" env-default:"localhost:8080"`
-	BaseURL    string `env:"BASE_URL" env-default:"http://localhost:8080"`
-	DB_DSN     string `env:"DATABASE_DSN" env-required:"true"`
-}
 
 type ShortenRequest struct {
 	URL string `json:"url"`
@@ -37,14 +26,14 @@ type ShortenResponse struct {
 
 type Server struct {
 	db  *sql.DB
-	cfg *Config
+	cfg *config.Config
 	log *slog.Logger
 }
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	cfg, err := LoadConfig()
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Error("Failed to load configuration", "error", err)
 		os.Exit(1)
@@ -87,7 +76,7 @@ func (s *Server) handleShorten(c *gin.Context) {
 		return
 	}
 
-	shortKey := generateShortKey()
+	shortKey := random.NewRandomString()
 
 	query := `INSERT INTO links (short_key, original_url) VALUES ($1, $2)`
 	if _, err := s.db.ExecContext(ctx, query, shortKey, req.URL); err != nil {
@@ -129,26 +118,4 @@ func (s *Server) handleRedirect(c *gin.Context) {
 	}
 
 	c.Redirect(http.StatusFound, longURL)
-}
-
-func generateShortKey() string {
-	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	var sb strings.Builder
-	sb.Grow(shortKeyLength)
-
-	for range shortKeyLength {
-		sb.WriteByte(charset[seededRand.Intn(len(charset))])
-	}
-
-	return sb.String()
-}
-
-func LoadConfig() (*Config, error) {
-	var cfg Config
-	if err := cleanenv.ReadConfig(".env", &cfg); err != nil {
-		// TODO: add ReadEnv
-		return nil, fmt.Errorf("failed to read config: %w", err)
-	}
-	return &cfg, nil
 }
