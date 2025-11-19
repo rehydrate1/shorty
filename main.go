@@ -7,21 +7,24 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ilyakaznacheev/cleanenv"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 const (
 	shortKeyLength = 6
 	charset        = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-	addr = "http://localhost"
-	port = ":8080"
 )
+
+type Config struct {
+	HTTPServer string `env:"HTTP_SERVER_ADDRESS" env-default:"localhost:8080"`
+	BaseURL    string `env:"BASE_URL" env-default:"http://localhost:8080"`
+	DB_DSN     string `env:"DATABASE_DSN" env-required:"true"`
+}
 
 type ShortenRequest struct {
 	URL string `json:"url"`
@@ -32,15 +35,17 @@ type ShortenResponse struct {
 }
 
 type Server struct {
-	db *sql.DB
+	db  *sql.DB
+	cfg *Config
 }
 
 func main() {
-	dsn := os.Getenv("DATABASE_DSN")
-	if dsn == "" {
-		log.Fatal("DATABASE_DSN env is not set")
+	cfg, err := LoadConfig()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
+	dsn := cfg.DB_DSN
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		log.Fatalf("ERROR: failed to open DB connection: %v", err)
@@ -53,14 +58,15 @@ func main() {
 
 	server := &Server{
 		db: db,
+		cfg: cfg,
 	}
 	router := gin.Default()
 
 	router.POST("/shorten", server.handleShorten)
 	router.GET("/:shortKey", server.handleRedirect)
 
-	log.Printf("Starting server at %s%s", addr, port)
-	if err := router.Run(port); err != nil {
+	log.Printf("Starting server at %s", cfg.BaseURL)
+	if err := router.Run(cfg.HTTPServer); err != nil {
 		log.Fatalf("ERROR: Failed to start server: %v", err)
 	}
 }
@@ -84,8 +90,7 @@ func (s *Server) handleShorten(c *gin.Context) {
 		return
 	}
 
-	baseURL := fmt.Sprintf("%s%s", addr, port)
-	shortURL := fmt.Sprintf("%s/%s", baseURL, shortKey)
+	shortURL := fmt.Sprintf("%s/%s", s.cfg.BaseURL, shortKey)
 
 	resp := ShortenResponse{ShortURL: shortURL}
 	c.JSON(http.StatusCreated, resp)
@@ -127,4 +132,13 @@ func generateShortKey() string {
 	}
 
 	return sb.String()
+}
+
+func LoadConfig() (*Config, error) {
+	var cfg Config
+	if err := cleanenv.ReadConfig(".env", &cfg); err != nil {
+		// TODO: add ReadEnv
+		return nil, fmt.Errorf("failed to read config: %w", err)
+	}
+	return &cfg, nil
 }
