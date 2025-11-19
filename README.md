@@ -1,6 +1,6 @@
 # Shorty
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/rehydrate1/shorty)](https://goreportcard.com/report/github.com/rehydrate1/shorty)
+[![Go Report Card](https://goreportcard.com/badge/github.com/rehydrate1/shorty?v=1)](https://goreportcard.com/report/github.com/rehydrate1/shorty)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Shorty is a high-performance URL shortening service written in Go.
