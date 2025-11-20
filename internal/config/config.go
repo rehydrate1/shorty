@@ -15,7 +15,7 @@ type Config struct {
 
 func LoadConfig() (*Config, error) {
 	var cfg Config
-	
+
 	if _, err := os.Stat(".env"); os.IsNotExist(err) {
 		if err := cleanenv.ReadEnv(&cfg); err != nil {
 			return nil, fmt.Errorf("failed to read env vars: %w", err)
