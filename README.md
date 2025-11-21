@@ -1,3 +1,4 @@
+
 # Shorty
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/rehydrate1/shorty?v=1)](https://goreportcard.com/report/github.com/rehydrate1/shorty)
@@ -13,6 +14,8 @@ It is designed to demonstrate **Clean Architecture** principles, **Dependency In
 -   **Web Framework:** [Gin](https://github.com/gin-gonic/gin) (Fast HTTP web framework)
 -   **Storage:** PostgreSQL
 -   **Database Driver:** [pgx](https://github.com/jackc/pgx) (High-performance driver)
+-   **Migrations:** [Goose](https://github.com/pressly/goose)
+-   **Containerization:** Docker & Docker Compose
 -   **Configuration:** [cleanenv](https://github.com/ilyakaznacheev/cleanenv) (12-Factor App compliant)
 -   **Logging:** `log/slog` (Structured JSON logging)
 -   **Testing:** `testing` (Standard lib) + [testify](https://github.com/stretchr/testify) (Assertions & Mocks)
@@ -29,49 +32,57 @@ The project follows the **Standard Go Project Layout**:
 │   ├── http-server/ # HTTP Handlers (Controllers)
 │   ├── lib/         # Shared libraries (e.g., random generator)
 │   └── storage/     # Storage layer (Repository pattern implementation)
+├── migrations/      # SQL migrations (Goose)
 ├── .env.example     # Template for environment variables
-└── .env             # Local environment variables (not committed)
+├── docker-compose.yml
+└── Dockerfile
 ```
 
-## Getting Started
+## Quick Start (Docker)
 
-### Prerequisites
+The easiest way to run the project is using Docker Compose. It will set up the app, database, and apply migrations automatically.
 
--   **Go** 1.22 or higher
--   **PostgreSQL** instance
-
-### 1. Database Setup
-
-Create a database (e.g., `shorty_db`) and execute the following SQL to create the table:
-
-```sql
-CREATE TABLE IF NOT EXISTS links (
-    id SERIAL PRIMARY KEY,
-    short_key VARCHAR(10) NOT NULL UNIQUE,
-    original_url TEXT NOT NULL
-);
-CREATE INDEX idx_short_key ON links(short_key);
-```
-
-### 2. Configuration
-
+### 1. Configuration
 Copy the example configuration file:
-
 ```sh
 cp .env.example .env
 ```
 
-Open `.env` and populate `DATABASE_DSN` with your PostgreSQL credentials.
+### 2. Run
+```sh
+docker-compose up --build
+```
 
-### 3. Run
+The server will start at `http://localhost:8080`.
+
+---
+
+## Local Development (Manual)
+
+If you prefer to run Go locally without Docker:
+
+### 1. Prerequisites
+-   Go 1.22+
+-   PostgreSQL
+-   [Goose](https://github.com/pressly/goose) (for migrations)
+
+### 2. Database Setup
+Create a database (e.g., `shorty_db`) and apply migrations:
+
+```sh
+# Install goose if needed: go install github.com/pressly/goose/v3/cmd/goose@latest
+export GOOSE_DRIVER=postgres
+export GOOSE_DBSTRING="postgres://user:password@localhost:5432/shorty_db?sslmode=disable"
+goose -dir ./migrations up
+```
+
+### 3. Run App
+Ensure your `.env` file points to your local Postgres instance, then:
 
 ```sh
 go mod tidy
 go run cmd/shorty/main.go
 ```
-
-You should see a log message:
-`{"time":"...","level":"INFO","msg":"Starting server","url":"http://localhost:8080"}`
 
 ## Running Tests
 
