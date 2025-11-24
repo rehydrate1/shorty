@@ -51,13 +51,19 @@ func TestSaveHandler(t *testing.T) {
 			mockError: errors.New("db error"),
 			wantCode:  http.StatusInternalServerError,
 		},
+		{
+			name: "Invalid URL",
+			inputURL: "not-a-url",
+			mockError: nil,
+			wantCode: http.StatusBadRequest,
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			urlSaverMock := new(MockURLSaver)
 
-			if tc.inputURL != "" {
+			if tc.wantCode != http.StatusBadRequest {
 				urlSaverMock.On("SaveURL", mock.Anything, mock.AnythingOfType("string"), tc.inputURL).
 					Return(tc.mockError)
 			}
