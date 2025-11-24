@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/rehydrate1/shorty/internal/config"
 	"github.com/rehydrate1/shorty/internal/http-server/handlers/url/redirect"
@@ -42,10 +47,33 @@ func main() {
 	router.POST("/shorten", saveHandler)
 	router.GET("/:shortKey", redirectHandler)
 
+	srv := &http.Server{
+		Addr:    cfg.HTTPServer,
+		Handler: router,
+	}
+
 	// server start
 	log.Info("Starting server", "url", cfg.BaseURL)
-	if err := router.Run(cfg.HTTPServer); err != nil {
-		log.Error("Failed to start server", "error", err)
-		os.Exit(1)
+	go func() {
+		err := srv.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			log.Error("Failed to start server", "error", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	<-quit
+	log.Info("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Error("Server forced to shutdown", "error", err)
 	}
+
+	log.Info("Server exiting")
 }
